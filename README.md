@@ -1,62 +1,63 @@
-# Actividad 3.2.2 - Pipeline de eventos bancarios end-to-end
+Actividad 3.2.2 - Pipeline de Transacciones y Alertas Antifraude (Kafka Streams)
+Implementación del caso de estudio corporativo utilizando Spring Boot y Kafka Streams para el procesamiento de eventos de pagos en tiempo real.
 
-Implementa el caso de la guía con Spring Boot y Kafka Streams.
+Plaintext
+POST /api/pagos/procesar
+  -> tx-pagos-entrantes (key = cliente)
+  -> filtro: monto > 15 USD
+  -> agregación: saldo acumulado por cliente (RocksDB State Store)
+  -> detección: umbral crítico > 8.000 USD
+  -> tx-alertas-criticas
+La conversión de moneda está normalizada a USD directamente en el contrato de entrada. La clave cliente garantiza el ordenamiento estricto de los eventos por partición.
 
-```text
-POST /api/banco/transaccion
-  -> banco-transacciones (key = usuario)
-  -> filtro: monto > 10 USD
-  -> agregación: total acumulado por usuario (state store)
-  -> detección: monto > 10.000 USD
-  -> banco-alertas
-```
+Requisitos del Entorno
+Asegúrate de contar con las siguientes herramientas instaladas y configuradas en tu sistema:
 
-La conversión a USD es simulada: los montos de entrada se tratan como USD, tal como el contrato de la guía no incluye moneda de origen. La key `usuario` preserva el orden de cada usuario dentro de su partición.
+Java 17 (JDK)
 
-## Ejecutar
+Maven (para la gestión de dependencias y empaquetado)
 
-Requiere Docker Desktop, Java 17 y Maven.
+Docker Desktop (para levantar el broker de Kafka y los servicios de soporte)
 
-```powershell
+Puesta en Marcha
+Levantar la infraestructura con Docker:
+
+PowerShell
 docker compose up -d
+Ejecutar la aplicación Spring Boot:
+
+PowerShell
 mvn spring-boot:run
-```
+Nota de puertos: La consola de Kafka UI operará en el puerto tradicional http://localhost:8080, mientras que la API REST del microservicio se configuró en el puerto http://localhost:9090 para evitar conflictos locales.
 
-Kafka UI queda en <http://localhost:8080> y la API usa <http://localhost:8081> para no colisionar con ella.
+Pruebas y Validación End-to-End
+Puedes utilizar curl desde PowerShell para simular el ingreso de transacciones al sistema:
 
-## Pruebas
+1. Transacción regular (Suma al acumulador, sin alertas)
+PowerShell
+curl.exe -X POST "http://localhost:9090/api/pagos/procesar" -H "Content-Type: application/json" -d '{"cliente":"carlos_dev","monto":350.0,"canal":"web"}'
+2. Transacción de alto riesgo (Supera el umbral y genera alerta)
+PowerShell
+curl.exe -X POST "http://localhost:9090/api/pagos/procesar" -H "Content-Type: application/json" -d '{"cliente":"carlos_dev","monto":9500.0,"canal":"pos_fisico"}'
+3. Transacción descartada por el filtro inicial (Monto menor al mínimo)
+PowerShell
+curl.exe -X POST "http://localhost:9090/api/pagos/procesar" -H "Content-Type: application/json" -d '{"cliente":"carlos_dev","monto":10.0,"canal":"web"}'
+Verificación en Kafka UI
+Ingresa a http://localhost:8080 en tu navegador.
 
-Transacción normal: se procesa y suma al total, sin alerta.
+Dirígete a Topics > tx-alertas-criticas > Messages.
 
-```powershell
-curl.exe -X POST "http://localhost:8081/api/banco/transaccion" -H "Content-Type: application/json" -d '{"usuario":"juan","monto":500,"origen":"app"}'
-```
+Deberías visualizar el evento de alerta generado por la segunda prueba con una estructura similar a esta:
 
-Transacción fraudulenta: además genera una alerta en `banco-alertas`.
-
-```powershell
-curl.exe -X POST "http://localhost:8081/api/banco/transaccion" -H "Content-Type: application/json" -d '{"usuario":"juan","monto":15000,"origen":"cajero"}'
-```
-
-Transacción filtrada: no llega a la agregación ni genera alerta.
-
-```powershell
-curl.exe -X POST "http://localhost:8081/api/banco/transaccion" -H "Content-Type: application/json" -d '{"usuario":"juan","monto":5,"origen":"app"}'
-```
-
-En Kafka UI, abre **Topics > banco-alertas > Messages**. Para la segunda prueba debe aparecer un mensaje como:
-
-```json
+JSON
 {
-  "usuario": "juan",
-  "monto": 15000.0,
-  "motivo": "Transaccion inusualmente alta en cajero",
-  "severidad": "ALTA"
+  "cliente": "carlos_dev",
+  "monto": 9500.0,
+  "alerta": "Alerta por transaccion anomala detectada en canal pos_fisico",
+  "nivelRiesgo": "CRITICO"
 }
-```
+Limpieza del Entorno
+Para apagar y eliminar los contenedores de infraestructura de forma limpia:
 
-Para detener la infraestructura:
-
-```powershell
-docker compose down
-```
+PowerShell
+docker compose down -v
