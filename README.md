@@ -1,8 +1,7 @@
-# Actividad 3.2.2 - Pipeline de eventos bancarios end-to-end
-
+Actividad 3.2.2 - Pipeline de eventos bancarios end-to-end
 Implementa el caso de la guía con Spring Boot y Kafka Streams.
 
-```text
+Plaintext
 POST /api/banco/transaccion
   -> banco-transacciones (key = usuario)
   -> filtro: monto > 10 USD
