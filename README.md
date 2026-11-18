@@ -1,47 +1,62 @@
-Actividad 3.2.2 - Pipeline de eventos bancarios end-to-end
-Implementa el caso de la guía con Spring Boot y Kafka Streams.
+# Actividad 3.2.2 - Pipeline de eventos bancarios end-to-end
 
-Plaintext
+Implementa el caso práctico de la guía utilizando Spring Boot y Kafka Streams.
+
+```text
 POST /api/banco/transaccion
   -> banco-transacciones (key = usuario)
   -> filtro: monto > 10 USD
   -> agregación: total acumulado por usuario (state store)
   -> detección: monto > 10.000 USD
   -> banco-alertas
-La conversión a USD es simulada: los montos de entrada se tratan como USD, tal como el contrato de la guía no incluye moneda de origen. La key usuario preserva el orden de cada usuario dentro de su partición.
+```
 
-Ejecutar
-Requiere Docker Desktop, Java 17 y Maven.
+La conversión a USD es simulada: los montos ingresados se asumen directamente en dólares, ya que el contrato definido en la guía no especifica moneda de origen. La clave `usuario` garantiza el orden secuencial de las operaciones de cada cliente dentro de su respectiva partición.
 
-PowerShell
+## Ejecución
+
+Para levantar el proyecto es necesario contar con Docker Desktop, Java 17 y Maven instalados.
+
+```powershell
 docker compose up -d
 mvn spring-boot:run
-Kafka UI queda en http://localhost:8080 y la API usa http://localhost:8081 para no colisionar con ella.
+```
 
-Pruebas
-Transacción normal: se procesa y suma al total, sin alerta.
+La interfaz de Kafka UI estará accesible en <http://localhost:8080>, mientras que la API REST opera en <http://localhost:8081> para evitar conflictos de puertos.
 
-PowerShell
+## Pruebas
+
+Transacción estándar: se procesa correctamente y suma al acumulado sin disparar alertas.
+
+```powershell
 curl.exe -X POST "http://localhost:8081/api/banco/transaccion" -H "Content-Type: application/json" -d '{"usuario":"juan","monto":500,"origen":"app"}'
-Transacción fraudulenta: además genera una alerta en banco-alertas.
+```
 
-PowerShell
+Transacción sospechosa: además de procesarse, emite una alerta hacia el tópico `banco-alertas`.
+
+```powershell
 curl.exe -X POST "http://localhost:8081/api/banco/transaccion" -H "Content-Type: application/json" -d '{"usuario":"juan","monto":15000,"origen":"cajero"}'
-Transacción filtrada: no llega a la agregación ni genera alerta.
+```
 
-PowerShell
+Transacción descartada: al no superar el monto mínimo, se filtra antes de la agregación y no genera alerta.
+
+```powershell
 curl.exe -X POST "http://localhost:8081/api/banco/transaccion" -H "Content-Type: application/json" -d '{"usuario":"juan","monto":5,"origen":"app"}'
-En Kafka UI, abre Topics > banco-alertas > Messages. Para la segunda prueba debe aparecer un mensaje como:
+```
 
-JSON
+Dentro de Kafka UI, navega hacia **Topics > banco-alertas > Messages**. Como resultado de la segunda prueba deberías visualizar un evento con el siguiente formato:
+
+```json
 {
   "usuario": "juan",
   "monto": 15000.0,
   "motivo": "Transaccion inusualmente alta en cajero",
   "severidad": "ALTA"
 }
-Detener infraestructura
-Para detener la infraestructura:
+```
 
-PowerShell
+Para apagar y detener los contenedores:
+
+```powershell
 docker compose down
+```
